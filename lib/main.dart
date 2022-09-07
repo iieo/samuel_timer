@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'App.dart';
 
 import 'dart:ui';
+import 'dart:io';
 import "dart:async";
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await initializeService();
+  if (Platform.isAndroid || Platform.isIOS) {
+    WidgetsFlutterBinding.ensureInitialized();
+    await initializeService();
+  } else {
+    startTimer();
+  }
   runApp(const MyApp());
 }
 
@@ -46,8 +51,13 @@ bool onIosBackground(ServiceInstance service) {
 
 void onStart(ServiceInstance service) async {
   // Only available for flutter 3.0.0 and later
+
   DartPluginRegistrant.ensureInitialized();
 
+  startTimer();
+}
+
+void startTimer() async {
   SharedPreferences preferences = await SharedPreferences.getInstance();
   int count1 = preferences.getInt("count1") ?? 0;
   int count2 = preferences.getInt("count2") ?? 0;
