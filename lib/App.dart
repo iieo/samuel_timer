@@ -1,11 +1,20 @@
 import 'dart:async';
 import 'background.dart';
 import 'package:flutter/material.dart';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
+
+  void reset() async {
+    SharedPreferences preferences = await SharedPreferences.getInstance();
+    for (int i = 0; i < 2; i++) {
+      await preferences.setInt("clock$i", 0);
+    }
+    await preferences.setBool("reset", true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,20 +31,19 @@ class MyApp extends StatelessWidget {
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TimeView(
-                    prefKey: "count1", title: "Modus 1", normalClock: false),
-                TimeView(
-                    prefKey: "count2", title: "Modus 2", normalClock: true),
+              children: const [
+                TimeView(clockIndex: 0, title: "Arbeiten"),
+                TimeView(clockIndex: 1, title: "Meditieren"),
               ],
             ),
-            ElevatedButton(
-                onPressed: () async {
-                  SharedPreferences preferences =
-                      await SharedPreferences.getInstance();
-                  preferences.setBool("reset", true);
-                },
-                child: const Text("Reset"))
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                TimeView(clockIndex: 2, title: "Schlafen"),
+                TimeView(clockIndex: 3, title: "Lernen"),
+              ],
+            ),
+            ElevatedButton(onPressed: reset, child: const Text("Reset"))
           ]),
         ),
       ]))),
@@ -44,15 +52,10 @@ class MyApp extends StatelessWidget {
 }
 
 class TimeView extends StatefulWidget {
-  final String prefKey;
+  final int clockIndex;
   final String title;
-  final bool normalClock;
 
-  const TimeView(
-      {super.key,
-      required this.prefKey,
-      required this.title,
-      required this.normalClock});
+  const TimeView({super.key, required this.clockIndex, required this.title});
 
   @override
   State<TimeView> createState() => _TimeViewState();
@@ -61,12 +64,25 @@ class TimeView extends StatefulWidget {
 class _TimeViewState extends State<TimeView> {
   final Future<SharedPreferences> _prefs = SharedPreferences.getInstance();
   late Future<int> _counter1;
+  late double size;
 
   String _toTimeFormat(int count) {
     int seconds = count % 60;
     int minutes = (count ~/ 60) % 60;
     int hours = (count ~/ 3600) % 24;
-    return "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+    int days = (count ~/ 86400);
+    return "${days.toString().padLeft(1, '0')}:${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+  }
+
+  double calcSize(SharedPreferences prefs) {
+    int totalTime = 0;
+    int clockTime = prefs.getInt("clock${widget.clockIndex}") ?? 0;
+    for (int i = 0; i < 2; i++) {
+      totalTime += prefs.getInt("clock$i") ?? 0;
+    }
+    return max(
+        (MediaQuery.of(context).size.width - 150) * (clockTime / totalTime),
+        100);
   }
 
   @override
@@ -75,22 +91,23 @@ class _TimeViewState extends State<TimeView> {
       future: _counter1,
       builder: (context, snapshot) {
         if (snapshot.hasData) {
-          return Padding(
-            padding: const EdgeInsets.all(20),
+          return Center(
             child: ElevatedButton(
               onPressed: () async {
                 SharedPreferences preferences =
                     await SharedPreferences.getInstance();
-                preferences.setBool("normalClockActive", widget.normalClock);
+                preferences.setInt("activeClock", widget.clockIndex);
               },
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    Text(widget.title),
-                    Text(_toTimeFormat(snapshot.data!)),
-                  ],
-                ),
+              style: ElevatedButton.styleFrom(
+                fixedSize: Size(size, size),
+                shape: const CircleBorder(),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(widget.title),
+                  Text(_toTimeFormat(snapshot.data!)),
+                ],
               ),
             ),
           );
@@ -106,13 +123,15 @@ class _TimeViewState extends State<TimeView> {
   void initState() {
     super.initState();
     _counter1 = _prefs.then((SharedPreferences prefs) {
-      return prefs.getInt(widget.prefKey) ?? 0;
+      return prefs.getInt("clock${widget.clockIndex}") ?? 0;
     });
     _prefs.then((SharedPreferences prefs) =>
-        Timer.periodic(const Duration(seconds: 1), (timer) {
+        Timer.periodic(const Duration(milliseconds: 100), (timer) {
           prefs.reload();
           setState(() {
-            _counter1 = Future(() => prefs.getInt(widget.prefKey) ?? 0);
+            _counter1 =
+                Future(() => prefs.getInt("clock${widget.clockIndex}") ?? 0);
+            size = calcSize(prefs);
           });
         }));
   }
